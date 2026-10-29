@@ -1,0 +1,38 @@
+diff --git a/GameMaker-Mobiler/Services/UtmtService.cs b/GameMaker-Mobiler/Services/UtmtService.cs
+--- a/GameMaker-Mobiler/Services/UtmtService.cs
++++ b/GameMaker-Mobiler/Services/UtmtService.cs
+@@ -154,6 +154,34 @@ public sealed class UtmtService
+                 _log?.Invoke("未勾选音乐内置：跳过导入所有音乐脚本。", false);
+             }
+ 
++            // A plain runner build must not require the optional mobile-control
++            // object. Some Windows games (including games that use mouse input
++            // only) do not contain gml_Object_mb_cont_mobile_Create_0. The
++            // original code continued into the mobile patch path even when the
++            // integration option was disabled, causing a false hard failure.
++            if (!addMobileKey)
++            {
++                cancellationToken.ThrowIfCancellationRequested();
++                _log?.Invoke("跳过 Mobile 集成：保留原始 data.win 内容。", false);
++                using (var dataWriteStream = new FileStream(
++                           workingOutputPath,
++                           FileMode.Create,
++                           FileAccess.Write,
++                           FileShare.None))
++                {
++                    UndertaleIO.Write(dataWriteStream, data);
++                }
++
++                if (!string.Equals(workingOutputPath, finalOutputPath, StringComparison.OrdinalIgnoreCase))
++                {
++                    Directory.CreateDirectory(Path.GetDirectoryName(finalOutputPath)!);
++                    File.Copy(workingOutputPath, finalOutputPath, overwrite: true);
++                }
++
++                _log?.Invoke($"已保存为: {finalOutputPath}", false);
++                return;
++            }
++
+             var templatePath = GetMobileContTemplatePath();
+             if (!File.Exists(templatePath))
+             {
