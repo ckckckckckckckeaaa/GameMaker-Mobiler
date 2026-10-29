@@ -1,0 +1,56 @@
+name: Build patched GameMaker Mobiler
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Apply plain-runner patch
+        shell: pwsh
+        run: |
+          git apply --check .github/patches/plain-runner.patch
+          git apply .github/patches/plain-runner.patch
+
+      - name: Restore dependencies
+        run: dotnet restore GameMaker-Mobiler.sln
+
+      - name: Publish self-contained Windows app
+        run: >-
+          dotnet publish GameMaker-Mobiler/GameMaker-Mobiler.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          -p:PublishSingleFile=false
+          --output publish
+
+      - name: Assemble portable bundle
+        shell: pwsh
+        run: |
+          $bundle = Join-Path $env:GITHUB_WORKSPACE 'bundle'
+          $app = Join-Path $bundle 'GameMaker-Mobiler/bin/Release/net8.0-windows'
+          New-Item -ItemType Directory -Force -Path $app | Out-Null
+          Copy-Item 'publish/*' $app -Recurse -Force
+          Copy-Item 'Tools' (Join-Path $bundle 'Tools') -Recurse -Force
+          Copy-Item 'GMS2 APK' (Join-Path $bundle 'GMS2 APK') -Recurse -Force
+          Copy-Item 'Packager' (Join-Path $bundle 'Packager') -Recurse -Force
+          Compress-Archive -Path (Join-Path $bundle '*') -DestinationPath 'GameMaker-Mobiler-patched-win-x64.zip' -Force
+
+      - name: Upload portable tool
+        uses: actions/upload-artifact@v4
+        with:
+          name: GameMaker-Mobiler-patched-win-x64
+          path: GameMaker-Mobiler-patched-win-x64.zip
+          retention-days: 7
