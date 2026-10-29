@@ -18,6 +18,14 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      # The repository's Tools/jre/bin directory is ignored by Git.
+      # Install a complete JRE on the runner so it can be packaged below.
+      - name: Set up portable Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
       - name: Apply plain-runner patch
         shell: pwsh
         run: |
@@ -41,9 +49,17 @@ jobs:
         run: |
           $bundle = Join-Path $env:GITHUB_WORKSPACE 'bundle'
           $app = Join-Path $bundle 'GameMaker-Mobiler/bin/Release/net8.0-windows'
+          $tools = Join-Path $bundle 'Tools'
           New-Item -ItemType Directory -Force -Path $app | Out-Null
           Copy-Item 'publish/*' $app -Recurse -Force
-          Copy-Item 'Tools' (Join-Path $bundle 'Tools') -Recurse -Force
+          Copy-Item 'Tools' $tools -Recurse -Force
+          # Replace incomplete repository JRE with the full Java 17 runtime.
+          Remove-Item (Join-Path $tools 'jre') -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path (Join-Path $tools 'jre') | Out-Null
+          Copy-Item (Join-Path $env:JAVA_HOME '*') (Join-Path $tools 'jre') -Recurse -Force
+          if (!(Test-Path (Join-Path $tools 'jre/bin/java.exe'))) {
+            throw 'Portable Java was not added to Tools/jre.'
+          }
           Copy-Item 'GMS2 APK' (Join-Path $bundle 'GMS2 APK') -Recurse -Force
           Copy-Item 'Packager' (Join-Path $bundle 'Packager') -Recurse -Force
           Compress-Archive -Path (Join-Path $bundle '*') -DestinationPath 'GameMaker-Mobiler-patched-win-x64.zip' -Force
